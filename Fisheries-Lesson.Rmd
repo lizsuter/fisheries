@@ -1,0 +1,154 @@
+---
+title: "Fisheries-Lesson-key"
+author: "Liz Suter"
+date: "11/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Based on Carl Boettinger's Data Science for [Global Change Ecology class](https://espm-157.carlboettiger.info/) at UC Berkley
+
+
+# Background
+
+## Watch
+
+- Background abbreviated documentary, features many of the leading authors on both sides **<https://vimeo.com/44104959>** 
+
+
+## Read
+
+- Original 2006 paper: Worm, B., Barbier, E. B., Beaumont, N., Duffy, J. E., Folke, C., Halpern, B. S., … Watson, R. (2006). Impacts of biodiversity loss on ocean ecosystem services. Science (New York, N.Y.), 314(5800), 787–90. <https://doi.org/10.1126/science.1132294>
+-  Overview of the database: Ricard, D., Minto, C., Jensen, O.P. and Baum, J.K. 2013. Evaluating the knowledge base and status of commercially exploited marine species with the RAM Legacy Stock Assessment Database. Fish and Fisheries 13 (4) 380-398. DOI: <https://doi.org/10.1111/j.1467-2979.2011.00435.x>
+- Perspective piece: Worm, B. (2016). Averting a global fisheries disaster. Proceedings of the National Academy of Sciences, 201604008. https://doi.org/10.1073/pnas.1604008113
+
+
+## Questions
+
+- What is the evidence on the status of global fisheries?
+- Is this controversial?
+- What is driving the stress on fisheries since the 1980s?
+- What is a trophic cascade? What is CPUE?
+
+## The Database
+
+We will use data from the [RAM Legacy Stock Assessment Database](https://www.ramlegacy.org/database/)
+
+# Exercise 1: Investigating the North-Atlantic Cod
+
+```{r}
+library(tidyverse)
+```
+
+Download zipfile from Zenodo link at [RAM Legacy Stock Assessment Database](https://www.ramlegacy.org/database/).
+Get data:
+```{r}
+# unzip("RAMLDB v4.495.zip")
+load("R Data/DBdata[asmt][v4.495].RData")
+```
+
+
+
+### We want the CPUE time series data for Atlantic Cod. How do we extract that? 
+
+Find all the stock IDs for Atlantic cod & retain them in a vector
+```{r}
+stock %>%
+  filter(commonname == "Atlantic cod")
+
+codIDS <- stock %>%
+  filter(commonname == "Atlantic cod") %>%
+  select(stockid)
+
+codIDS
+
+```
+
+
+Filter the CPUE table based on these IDs
+```{r}
+
+# First retain only codIDs that exist in cpue.data
+codIDS2 <- codIDS %>%
+  filter(stockid %in% colnames(cpue.data))
+codIDS2
+
+cod_cpue_data <- 
+  cpue.data %>%
+  subset(select=unlist(codIDS2)) # unlist converts the list of IDs to a character array, which is needed by Select
+
+```
+
+
+Data clean up- there are a few things we need to do to make the data more suitable for ggplot
+```{r}
+# Make rownames (year) into a variable column
+cod_cpue_data <- rownames_to_column(cod_cpue_data, var = "year")
+
+# Make data "longer": ggplot really likes long data over wide data
+cod_cpue_data <- pivot_longer(cod_cpue_data, !year, names_to = "species", values_to = "cpue")
+
+
+cod_cpue_data
+```
+
+
+Plot CPUE data for the two stock that were assessed by CPUE
+```{r}
+ggplot(data = cod_cpue_data) +
+  geom_line(aes(x = as.numeric(year), y = cpue, color = species)) +
+  xlim(1995, 2011) 
+```
+
+
+# In-class Activity
+First, let's seek to replicate the following figure from the Millennium Ecosystem Assessment on total landings using the RAM data.
+
+
+![](http://espm-157.carlboettiger.info/img/cod.jpg)
+
+
+Make plots with total landings (`TL`) data
+- Read a little about the database structure in `Database Structure (12-5-19).docx`, in the Database documents folder
+- Read about files and abbreviations in `Database Structure (12-5-19).docx`
+- Total landings are in `timeseries_values_views` as TL but also pulled out separately in `tl.data`
+
+
+Modify `tl.data` to make years into a column, pivot longer, and remove empty rows
+```{r}
+# Make rownames (year) into a variable column
+tl.data.mod <- rownames_to_column(tl.data, var = "year")
+
+# Make data "longer": ggplot really likes long data over wide data
+tl.data.mod <- pivot_longer(tl.data.mod, !year, names_to = "stockid", values_to = "TL")
+
+# Remove empty rows for convenience
+tl.data.mod <- tl.data.mod %>% drop_na(TL)
+
+tl.data.mod
+```
+
+Attach the scientific names to the stock IDs
+(Hint- this is in `stockid`)
+
+```{r}
+tl.data.mod <- left_join(tl.data.mod,stock, by = "stockid")
+tl.data.mod
+```
+
+CHALLENGE - Calculate total landings per year for all species
+```{r}
+tl.data.mod <- tl.data.mod %>%
+  group_by(year) %>%
+  summarise(TL_allspecies = sum(TL))
+
+tl.data.mod
+```
+# Plot landings over time!
+```{r}
+ggplot(data = tl.data.mod) +
+  geom_line(aes(x = as.numeric(year), y = TL_allspecies))
+```
